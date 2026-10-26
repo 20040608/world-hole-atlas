@@ -6,6 +6,7 @@ import { GameRenderer } from '../render/scene';
 import { Input } from '../ui/input';
 import { Audio } from '../audio/audio';
 import { Bot } from '../core/bot';
+import { showFatal } from '../ui/fatal';
 import { DESTINATIONS, SAVE_KEY, readPassport, stars, type Passport } from './destinations';
 import { expeditionMap, expeditionConfig } from './maps';
 
@@ -100,7 +101,13 @@ export class Expedition {
   private drawMinimap(){const ctx=this.minimap?.getContext('2d');if(!ctx)return;const w=this.world,n=180,k=n/w.map.size;ctx.clearRect(0,0,n,n);ctx.fillStyle='#101f2b';ctx.fillRect(0,0,n,n);ctx.strokeStyle='#29404b';for(let i=0;i<n;i+=30){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,n);ctx.moveTo(0,i);ctx.lineTo(n,i);ctx.stroke();}
     for(const o of w.objects){if(o.state!==ALIVE)continue;const landmark=OBJECT_TYPES[o.t].id.startsWith('atlas-');ctx.fillStyle=landmark?'#ffd483':o.f<w.main.r*.9?'#80f7cf':'#486271';const r=landmark?3:1;ctx.fillRect((o.x+w.map.half)*k-r,(o.z+w.map.half)*k-r,r*2,r*2);}
     ctx.fillStyle='#fff';ctx.beginPath();ctx.arc((w.main.x+w.map.half)*k,(w.main.z+w.map.half)*k,4,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#80f7cf';ctx.beginPath();ctx.arc((w.main.x+w.map.half)*k,(w.main.z+w.map.half)*k,Math.max(6,w.main.r*k),0,Math.PI*2);ctx.stroke();}
-  private frame(t:number){const dt=Math.min(.05,Math.max(0,(t-this.last)/1000));this.last=t;this.input.pollGamepad();
+  private frame(t:number){
+    try { this.tick(t); } catch(err) {
+      this.input.enabled=false;this.input.reset();this.checkpointSave();this.audio.setHidden(true);
+      console.error(err);showFatal('World Hole stopped', 'A rendering or simulation error occurred. Your best recorded progress is kept on this device. Reload to continue.');
+    }
+  }
+  private tick(t:number){const dt=Math.min(.05,Math.max(0,(t-this.last)/1000));this.last=t;this.input.pollGamepad();
     if(this.state==='playing'||this.state==='atlas'){
       this.world.input=this.state==='atlas'?this.bot.steer(this.world,dt):this.input.vector();this.world.step(dt);
       for(const e of this.world.events){if(this.state==='atlas')continue;if(e.k==='eat'){this.audio.gulp(e.o.f);if(OBJECT_TYPES[e.o.t].id.startsWith('atlas-')){this.visitedLandmark=true;const id=DESTINATIONS[this.selected].id;if(!this.passport.landmarks.includes(id))this.passport.landmarks.push(id);this.message='LANDMARK DEVOURED! Your passport has a new stamp.';this.renderer.landmarkBurst(this.world,e.o.f,true);this.checkpointSave();}}
